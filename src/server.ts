@@ -1,14 +1,22 @@
+import "reflect-metadata";
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import { PrismaClient } from "@prisma/client";
+import path from "path";
+import swaggerUi from "swagger-ui-express";
+
+import { AppDataSource } from "./config/data-source.config";
+import { sanitizeInput } from "./shared/middlewares/sanitization.middleware";
+import { errorHandler } from "./shared/middlewares/error-handler.middleware";
+import { RegisterRoutes } from "./routes";
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-const prisma = new PrismaClient();
 
-// Middleware
 app.use(helmet());
 app.use(cors());
 app.use(morgan("combined"));
@@ -24,23 +32,57 @@ app.get("/health", (_req, res) => {
   });
 });
 
+app.use(sanitizeInput);
+
+app.get("/swagger.json", (_req, res) => {
+  res.sendFile(path.join(__dirname, "../public/swagger.json"));
+});
+
+app.use(
+  "/docs",
+  swaggerUi.serve,
+  swaggerUi.setup(undefined, {
+    swaggerUrl: "/swagger.json",
+    explorer: true,
+    customCssUrl: "/swagger-ui-custom.css",
+  })
+);
+
+RegisterRoutes(app);
+
+app.use(errorHandler);
+
 // Graceful shutdown
-process.on("SIGINT", async () => {
-  console.log(" Shutting down gracefully...");
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on("SIGTERM", async () => {
+const gracefulShutdown = async () => {
   console.log("🛑 Shutting down gracefully...");
-  await prisma.$disconnect();
+  try {
+    await AppDataSource.destroy();
+    console.log("✅ Database connection closed");
+  } catch (error) {
+    console.error("❌ Error closing database:", error);
+  }
   process.exit(0);
-});
+};
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-});
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);
+
+const startServer = async () => {
+  try {
+    await AppDataSource.initialize();
+    console.log("✅ Database connected successfully");
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📊 Health check: http://localhost:${PORT}/health`);
+      console.log(`📖 API docs: http://localhost:${PORT}/docs`);
+    });
+  } catch (error) {
+    console.error("❌ Error starting server:", error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app;
