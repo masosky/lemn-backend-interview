@@ -213,12 +213,12 @@ npm run test:coverage
 
 The project includes Docker configuration for easy deployment:
 
-- `Dockerfile` - Application container
 - `docker-compose.yml` - Multi-container setup with PostgreSQL
 
 ## 🔒 Environment Variables
 
 Check .env.example for environment variables.
+Create a .env
 
 ## Evaluation Criteria
 
